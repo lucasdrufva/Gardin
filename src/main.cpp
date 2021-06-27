@@ -5,6 +5,7 @@
 #include <WebServer.h>
 #include <uri/UriBraces.h>
 #include <ArduinoNvs.h>
+#include <string>  
 
 #include "wifi_cred.h"
 
@@ -19,40 +20,38 @@ enum state {
 state currentState = up;
 state futureState = up;
 
-const int stepsPerRevolution = 2048;
+#define STEPS_PER_REVOLUTION 2048
 
-int in1Pin = 32;
-int in2Pin = 14;
-int in3Pin = 22;
-int in4Pin = 23;
+#define STEPPER_PIN_1 32
+#define STEPPER_PIN_2 14
+#define STEPPER_PIN_3 22
+#define STEPPER_PIN_4 23
 
-Stepper motor(stepsPerRevolution, in1Pin, in3Pin, in2Pin, in4Pin);
+Stepper motor(STEPS_PER_REVOLUTION, STEPPER_PIN_1, STEPPER_PIN_3, STEPPER_PIN_2, STEPPER_PIN_4);
 
 void moveDirection(state direction)
 {
   motor.setSpeed(3);
-  //25
-  for (int i = 0; i < 1; i++)
+  for (int i = 0; i < 25; i++)
   {
     if (direction == up)
     {
-      motor.step(-stepsPerRevolution);
+      motor.step(-STEPS_PER_REVOLUTION);
     }
     else if(direction == down)
     {
-      motor.step(stepsPerRevolution);
+      motor.step(STEPS_PER_REVOLUTION);
     }
   }
   delay(100);
-  digitalWrite(in1Pin, LOW);
-  digitalWrite(in2Pin, LOW);
-  digitalWrite(in3Pin, LOW);
-  digitalWrite(in4Pin, LOW);
+  digitalWrite(STEPPER_PIN_1, LOW);
+  digitalWrite(STEPPER_PIN_2, LOW);
+  digitalWrite(STEPPER_PIN_3, LOW);
+  digitalWrite(STEPPER_PIN_4, LOW);
 
   currentState = direction;
   NVS.setInt("state", currentState);
 }
-
 
 void stepperTask(void *parameters){
   for(;;){
@@ -63,8 +62,23 @@ void stepperTask(void *parameters){
       Serial.println(futureState);
       currentState = moving;
 
-      
       moveDirection(futureState);
+    }
+  }
+}
+
+void buttonTask(void *parameters){
+  int buttonState;
+
+  for(;;){
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+    buttonState = digitalRead(0);
+    if(buttonState == HIGH) continue;
+    if(currentState == up) {
+      futureState = down;
+    }
+    else if(currentState == down){
+      futureState = up;
     }
   }
 }
@@ -135,10 +149,12 @@ void serverTask(void *parameters){
     }else if(directionString == "down"){
       futureState = down;
       Serial.println("move down!");
-      Serial.println(currentState);
-      Serial.println(futureState);
     }
     server.send(200, "text/plain", "Direction: '" + directionString + "'");
+  });
+
+  server.on("/current", []() {
+    server.send(200, "text/plain", String(currentState));
   });
 
   //Wait for wifi
@@ -154,10 +170,10 @@ void serverTask(void *parameters){
 
 void setup()
 {
-  pinMode(in1Pin, OUTPUT);
-  pinMode(in2Pin, OUTPUT);
-  pinMode(in3Pin, OUTPUT);
-  pinMode(in4Pin, OUTPUT);
+  pinMode(STEPPER_PIN_1, OUTPUT);
+  pinMode(STEPPER_PIN_2, OUTPUT);
+  pinMode(STEPPER_PIN_3, OUTPUT);
+  pinMode(STEPPER_PIN_4, OUTPUT);
 
   Serial.begin(115200);
 
@@ -171,63 +187,7 @@ void setup()
   xTaskCreatePinnedToCore(keepWiFiAlive, "keepWiFiAlive", 5000, NULL, 1, NULL, CONFIG_ARDUINO_RUNNING_CORE);
   xTaskCreate(serverTask, "serverTask", 5000, NULL, 1, NULL);
   xTaskCreate(stepperTask, "stepperTask", 10000, NULL, 1, NULL);
+  xTaskCreate(buttonTask, "buttonTask", 5000, NULL, 1, NULL);
 }
 
-void loop()
-{
-}
-
-
-/*
-#include <WiFi.h>
-#include <WebServer.h>
-
-// SSID & Password
-const char* ssid = "Hemma2020";  // Enter your SSID here
-const char* password = "Almvagen66@";  //Enter your Password here
-
-WebServer server(80);  // Object of WebServer(HTTP port, 80 is defult)
-
-
-// HTML & CSS contents which display on web server
-String HTML = "<!DOCTYPE html>\
-<html>\
-<body>\
-<h1>My First Web Server with ESP32 - Station Mode &#128522;</h1>\
-</body>\
-</html>";
-
-// Handle root url (/)
-void handle_root() {
-  server.send(200, "text/html", HTML);
-}
-
-void setup() {
-  Serial.begin(115200);
-  Serial.println("Try Connecting to ");
-  Serial.println(ssid);
-
-  // Connect to your wi-fi modem
-  WiFi.begin(ssid, password);
-
-  // Check wi-fi is connected to wi-fi network
-  while (WiFi.status() != WL_CONNECTED) {
-  delay(1000);
-  Serial.print(".");
-  }
-  Serial.println("");
-  Serial.println("WiFi connected successfully");
-  Serial.print("Got IP: ");
-  Serial.println(WiFi.localIP());  //Show ESP32 IP on serial
-
-  server.on("/", handle_root);
-
-  server.begin();
-  Serial.println("HTTP server started");
-  delay(100); 
-}
-
-void loop() {
-  server.handleClient();
-}
-*/
+void loop() {}
